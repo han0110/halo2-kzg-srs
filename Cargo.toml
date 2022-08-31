@@ -1,0 +1,9 @@
+[package]
+name = "halo2-kzg-srs"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+halo2_curves = { git = 'https://github.com/privacy-scaling-explorations/halo2curves', tag = "0.2.1", package = "halo2curves" }
+rand_core = "0.6.3"
+rayon = "1.5.3"
