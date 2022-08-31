@@ -156,7 +156,9 @@ dependencies = [
 name = "halo2-kzg-srs"
 version = "0.1.0"
 dependencies = [
+ "byteorder",
  "halo2curves",
+ "num-bigint",
  "rand_core",
  "rayon",
 ]

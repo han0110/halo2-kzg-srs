@@ -253,12 +253,19 @@ pub fn recursive_butterfly_arithmetic<G: Group>(
 }
 
 /// Convert coefficient bases group elements to lagrange basis by inverse FFT.
-pub fn g_to_lagrange<C: CurveAffine>(g_projective: Vec<C::Curve>, k: u32) -> Vec<C> {
+pub fn g_to_lagrange<C: CurveAffine>(g: &[C], k: u32) -> Vec<C> {
     let n_inv = C::Scalar::TWO_INV.pow_vartime(&[k as u64, 0, 0, 0]);
     let mut omega_inv = C::Scalar::ROOT_OF_UNITY_INV;
     for _ in k..C::Scalar::S {
         omega_inv = omega_inv.square();
     }
+
+    let mut g_projective = vec![C::Curve::default(); g.len()];
+    parallelize(&mut g_projective, |g_projective, start| {
+        for (i, g_projective) in g_projective.iter_mut().enumerate() {
+            *g_projective = g[start + i].to_curve();
+        }
+    });
 
     let mut g_lagrange_projective = g_projective;
     best_fft(&mut g_lagrange_projective, omega_inv, k);

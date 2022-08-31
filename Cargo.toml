@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+byteorder = "1.4.3"
 halo2_curves = { git = 'https://github.com/privacy-scaling-explorations/halo2curves', tag = "0.2.1", package = "halo2curves" }
+num-bigint = "0.4.3"
 rand_core = "0.6.3"
 rayon = "1.5.3"
