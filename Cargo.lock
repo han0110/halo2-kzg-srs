@@ -153,7 +153,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "halo2-kzg-srs"
+name = "halo2_kzg_srs"
 version = "0.1.0"
 dependencies = [
  "byteorder",

@@ -326,7 +326,7 @@ mod test {
 
     #[test]
     fn test_perpetual_powers_of_tau() {
-        const PATH: &str = "./src/fixture/perpetual-powers-of-tau/bn254-8";
+        const PATH: &str = "./src/testdata/perpetual-powers-of-tau/bn254-8";
         let from_pot = Srs::<Bn256>::read(
             &mut File::open(PATH).unwrap(),
             SrsFormat::PerpetualPowerOfTau(8),
@@ -341,7 +341,7 @@ mod test {
 
     #[test]
     fn test_snarkjs() {
-        const PATH: &str = "./src/fixture/snarkjs/bn254-8";
+        const PATH: &str = "./src/testdata/snarkjs/bn254-8";
         let from_snarkjs = Srs::<Bn256>::read(&mut File::open(PATH).unwrap(), SrsFormat::SnarkJs);
         let from_pse = {
             let mut buf = Vec::new();
