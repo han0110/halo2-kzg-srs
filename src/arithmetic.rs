@@ -8,10 +8,30 @@ use halo2_curves::{
         ff::{Field, PrimeField},
         Curve, Group as _,
     },
+    pairing::{MillerLoopResult, MultiMillerLoop},
     CurveAffine, FieldExt, Group,
 };
+use rand_core::OsRng;
 use rayon as multicore;
-use std::io;
+use std::{io, iter};
+
+pub fn same_ratio<M: MultiMillerLoop>(
+    g1s: &[M::G1Affine],
+    g2: M::G2Affine,
+    s_g2: M::G2Affine,
+) -> bool {
+    let coeffs = iter::repeat_with(|| M::Scalar::random(OsRng))
+        .take(g1s.len() - 1)
+        .collect::<Vec<_>>();
+
+    let lhs = best_multiexp(&coeffs, &g1s[..g1s.len() - 1]);
+    let rhs = best_multiexp(&coeffs, &g1s[1..g1s.len()]);
+
+    M::multi_miller_loop(&[(&lhs.into(), &s_g2.into()), (&rhs.into(), &(-g2).into())])
+        .final_exponentiation()
+        .is_identity()
+        .into()
+}
 
 fn multiexp_serial<C: CurveAffine>(coeffs: &[C::Scalar], bases: &[C], acc: &mut C::Curve) {
     let coeffs: Vec<_> = coeffs.iter().map(|a| a.to_repr()).collect();
@@ -108,7 +128,7 @@ fn multiexp_serial<C: CurveAffine>(coeffs: &[C::Scalar], bases: &[C], acc: &mut 
 /// This function will panic if coeffs and bases have a different length.
 ///
 /// This will use multithreading if beneficial.
-pub fn best_multiexp<C: CurveAffine>(coeffs: &[C::Scalar], bases: &[C]) -> C::Curve {
+pub(crate) fn best_multiexp<C: CurveAffine>(coeffs: &[C::Scalar], bases: &[C]) -> C::Curve {
     assert_eq!(coeffs.len(), bases.len());
 
     let num_threads = multicore::current_num_threads();
@@ -147,7 +167,7 @@ pub fn best_multiexp<C: CurveAffine>(coeffs: &[C::Scalar], bases: &[C]) -> C::Cu
 /// by $n$.
 ///
 /// This will use multithreading if beneficial.
-pub fn best_fft<G: Group>(a: &mut [G], omega: G::Scalar, log_n: u32) {
+pub(crate) fn best_fft<G: Group>(a: &mut [G], omega: G::Scalar, log_n: u32) {
     fn bitreverse(mut n: usize, l: usize) -> usize {
         let mut r = 0;
         for _ in 0..l {
@@ -213,7 +233,7 @@ pub fn best_fft<G: Group>(a: &mut [G], omega: G::Scalar, log_n: u32) {
 }
 
 /// This perform recursive butterfly arithmetic
-pub fn recursive_butterfly_arithmetic<G: Group>(
+pub(crate) fn recursive_butterfly_arithmetic<G: Group>(
     a: &mut [G],
     n: usize,
     twiddle_chunk: usize,
@@ -253,7 +273,7 @@ pub fn recursive_butterfly_arithmetic<G: Group>(
 }
 
 /// Convert coefficient bases group elements to lagrange basis by inverse FFT.
-pub fn g_to_lagrange<C: CurveAffine>(g: &[C], k: u32) -> Vec<C> {
+pub(crate) fn g_to_lagrange<C: CurveAffine>(g: &[C], k: u32) -> Vec<C> {
     let n_inv = C::Scalar::TWO_INV.pow_vartime(&[k as u64, 0, 0, 0]);
     let mut omega_inv = C::Scalar::ROOT_OF_UNITY_INV;
     for _ in k..C::Scalar::S {
@@ -288,7 +308,10 @@ pub fn g_to_lagrange<C: CurveAffine>(g: &[C], k: u32) -> Vec<C> {
 
 /// This simple utility function will parallelize an operation that is to be
 /// performed over a mutable slice.
-pub fn parallelize<T: Send, F: Fn(&mut [T], usize) + Send + Sync + Clone>(v: &mut [T], f: F) {
+pub(crate) fn parallelize<T: Send, F: Fn(&mut [T], usize) + Send + Sync + Clone>(
+    v: &mut [T],
+    f: F,
+) {
     let n = v.len();
     let num_threads = multicore::current_num_threads();
     let mut chunk = (n as usize) / num_threads;

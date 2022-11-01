@@ -9,3 +9,8 @@ halo2_curves = { git = 'https://github.com/privacy-scaling-explorations/halo2cur
 num-bigint = "0.4.3"
 rand_core = "0.6.3"
 rayon = "1.5.3"
+
+[dev-dependencies]
+hyper = { version = "0.14", features = ["tcp", "client", "http1"] }
+tokio = { version = "1", features = ["rt", "net", "macros"] }
+hyper-tls = "0.5"
