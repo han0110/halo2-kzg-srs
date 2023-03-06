@@ -1,4 +1,4 @@
-use halo2_curves::{group::ff::PrimeField, CurveAffine, FieldExt};
+use halo2_curves::{group::ff::PrimeField, serde::SerdeObject, CurveAffine, FieldExt};
 use num_bigint::BigUint;
 
 pub fn field_repr_size<F: PrimeField>() -> usize {
@@ -7,6 +7,12 @@ pub fn field_repr_size<F: PrimeField>() -> usize {
 
 pub fn ec_point_repr_size<C: CurveAffine>() -> usize {
     C::Repr::default().as_ref().len()
+}
+
+pub fn ec_point_raw_size<C: CurveAffine + SerdeObject>() -> usize {
+    let mut buf = Vec::new();
+    C::default().write_raw(&mut buf).unwrap();
+    buf.len()
 }
 
 fn modulus<F: FieldExt>() -> BigUint {
@@ -21,9 +27,12 @@ fn mont_r<F: FieldExt>() -> F {
 }
 
 pub mod pse {
-    use crate::{arithmetic::parallelize, util::ec_point_repr_size};
+    use crate::{
+        arithmetic::parallelize,
+        util::{ec_point_raw_size, ec_point_repr_size},
+    };
     use byteorder::{LittleEndian, ReadBytesExt};
-    use halo2_curves::{pairing::MultiMillerLoop, CurveAffine};
+    use halo2_curves::{pairing::MultiMillerLoop, serde::SerdeObject, CurveAffine};
     use std::io;
 
     pub const G1_OFFSET: u64 = 4;
@@ -37,45 +46,79 @@ pub mod pse {
         reader.seek(io::SeekFrom::Start(G1_OFFSET)).unwrap();
     }
 
-    fn seek_g2_offset<M: MultiMillerLoop, R: io::Read + io::Seek>(reader: &mut R) {
-        let g1_size = ec_point_repr_size::<M::G1Affine>();
+    fn seek_g2_offset<M: MultiMillerLoop, R: io::Read + io::Seek, const RAW: bool>(reader: &mut R)
+    where
+        M::G1Affine: SerdeObject,
+    {
+        let g1_size = if RAW {
+            ec_point_raw_size::<M::G1Affine>()
+        } else {
+            ec_point_repr_size::<M::G1Affine>()
+        };
         let offset = 4 + g1_size * 2 * (1 << read_k(reader));
         reader.seek(io::SeekFrom::Start(offset as u64)).unwrap();
     }
 
-    fn read_ec_points<C: CurveAffine, R: io::Read>(reader: &mut R, n: usize) -> Vec<C> {
-        let mut reprs = vec![C::Repr::default(); n];
-        for repr in reprs.iter_mut() {
-            reader.read_exact(repr.as_mut()).unwrap();
-        }
-
-        let mut points = vec![C::default(); n];
-        parallelize(&mut points, |points, start| {
-            for (i, point) in points.iter_mut().enumerate() {
-                *point = C::from_bytes(&reprs[start + i]).unwrap();
-            }
-        });
-        points
-    }
-
-    pub fn read_g1s<M: MultiMillerLoop, R: io::Read + io::Seek, const IN_PLACE: bool>(
+    fn read_ec_points<C: CurveAffine + SerdeObject, R: io::Read, const RAW: bool>(
         reader: &mut R,
         n: usize,
-    ) -> Vec<M::G1Affine> {
+    ) -> Vec<C> {
+        if RAW {
+            (0..n)
+                .map(|_| <C as SerdeObject>::read_raw(reader))
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap()
+        } else {
+            let mut reprs = vec![C::Repr::default(); n];
+            for repr in reprs.iter_mut() {
+                reader.read_exact(repr.as_mut()).unwrap();
+            }
+
+            let mut points = vec![C::default(); n];
+            parallelize(&mut points, |points, start| {
+                for (i, point) in points.iter_mut().enumerate() {
+                    *point = C::from_bytes(&reprs[start + i]).unwrap();
+                }
+            });
+            points
+        }
+    }
+
+    pub fn read_g1s<
+        M: MultiMillerLoop,
+        R: io::Read + io::Seek,
+        const RAW: bool,
+        const IN_PLACE: bool,
+    >(
+        reader: &mut R,
+        n: usize,
+    ) -> Vec<M::G1Affine>
+    where
+        M::G1Affine: SerdeObject,
+    {
         if !IN_PLACE {
             seek_g1_offset(reader);
         }
-        read_ec_points(reader, n)
+        read_ec_points::<_, _, RAW>(reader, n)
     }
 
-    pub fn read_g2s<M: MultiMillerLoop, R: io::Read + io::Seek, const IN_PLACE: bool>(
+    pub fn read_g2s<
+        M: MultiMillerLoop,
+        R: io::Read + io::Seek,
+        const RAW: bool,
+        const IN_PLACE: bool,
+    >(
         reader: &mut R,
         n: usize,
-    ) -> Vec<M::G2Affine> {
+    ) -> Vec<M::G2Affine>
+    where
+        M::G1Affine: SerdeObject,
+        M::G2Affine: SerdeObject,
+    {
         if !IN_PLACE {
-            seek_g2_offset::<M, _>(reader);
+            seek_g2_offset::<M, _, RAW>(reader);
         }
-        read_ec_points(reader, n)
+        read_ec_points::<_, _, RAW>(reader, n)
     }
 }
 
