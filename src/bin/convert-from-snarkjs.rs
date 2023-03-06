@@ -28,6 +28,6 @@ fn main() {
         let mut srs = srs.clone();
         srs.downsize(k);
         let path = format!("{dst_prefix}{k}");
-        srs.write(&mut File::create(path).expect("Couldn't create file at {path}"))
+        srs.write_raw(&mut File::create(path).expect("Couldn't create file at {path}"))
     }
 }

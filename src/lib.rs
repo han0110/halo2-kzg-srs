@@ -1,6 +1,6 @@
 use arithmetic::{g_to_lagrange, same_ratio};
 use byteorder::{LittleEndian, ReadBytesExt};
-use halo2_curves::{group::GroupEncoding, pairing::MultiMillerLoop};
+use halo2_curves::{group::GroupEncoding, pairing::MultiMillerLoop, serde::SerdeObject};
 use std::io;
 use util::{perpetual_powers_of_tau, pse, snarkjs};
 
@@ -10,6 +10,8 @@ pub mod util;
 pub enum SrsFormat {
     /// From https://github.com/privacy-scaling-explorations/halo2
     Pse,
+    /// From https://github.com/privacy-scaling-explorations/halo2
+    PseRaw,
     /// From https://github.com/weijiekoh/perpetualpowersoftau
     PerpetualPowerOfTau(u32),
     /// From https://github.com/iden3/snarkjs
@@ -37,10 +39,14 @@ impl<M: MultiMillerLoop> PartialEq for Srs<M> {
     }
 }
 
-impl<M: MultiMillerLoop> Srs<M> {
+impl<M: MultiMillerLoop> Srs<M>
+where
+    M::G1Affine: SerdeObject,
+    M::G2Affine: SerdeObject,
+{
     pub fn read<R: io::Read + io::Seek>(reader: &mut R, format: SrsFormat) -> Self {
         let desired_k = match format {
-            SrsFormat::Pse => reader.read_u32::<LittleEndian>().unwrap(),
+            SrsFormat::Pse | SrsFormat::PseRaw => reader.read_u32::<LittleEndian>().unwrap(),
             SrsFormat::PerpetualPowerOfTau(k) => k,
             SrsFormat::SnarkJs => snarkjs::read_k(reader),
         };
@@ -54,30 +60,8 @@ impl<M: MultiMillerLoop> Srs<M> {
         desired_k: u32,
     ) -> Self {
         let srs = match format {
-            SrsFormat::Pse => {
-                let k = pse::read_k(reader);
-                assert!(desired_k <= k);
-
-                let n = 1 << desired_k;
-
-                let g = pse::read_g1s::<M, _, false>(reader, n);
-                let g_lagrange = if k == desired_k {
-                    pse::read_g1s::<M, _, true>(reader, n)
-                } else {
-                    g_to_lagrange(&g, desired_k)
-                };
-
-                let [g2, s_g2]: [_; 2] =
-                    pse::read_g2s::<M, _, false>(reader, 2).try_into().unwrap();
-
-                Self {
-                    k: desired_k,
-                    g,
-                    g_lagrange,
-                    g2,
-                    s_g2,
-                }
-            }
+            SrsFormat::Pse => Self::read_partial_pse::<_, false>(reader, desired_k),
+            SrsFormat::PseRaw => Self::read_partial_pse::<_, true>(reader, desired_k),
             SrsFormat::PerpetualPowerOfTau(k) => {
                 assert!(desired_k <= k);
 
@@ -127,6 +111,35 @@ impl<M: MultiMillerLoop> Srs<M> {
         srs
     }
 
+    fn read_partial_pse<R: io::Read + io::Seek, const RAW: bool>(
+        reader: &mut R,
+        desired_k: u32,
+    ) -> Self {
+        let k = pse::read_k(reader);
+        assert!(desired_k <= k);
+
+        let n = 1 << desired_k;
+
+        let g = pse::read_g1s::<M, _, RAW, false>(reader, n);
+        let g_lagrange = if k == desired_k {
+            pse::read_g1s::<M, _, RAW, true>(reader, n)
+        } else {
+            g_to_lagrange(&g, desired_k)
+        };
+
+        let [g2, s_g2]: [_; 2] = pse::read_g2s::<M, _, RAW, false>(reader, 2)
+            .try_into()
+            .unwrap();
+
+        Self {
+            k: desired_k,
+            g,
+            g_lagrange,
+            g2,
+            s_g2,
+        }
+    }
+
     pub fn write(&self, writer: &mut impl io::Write) {
         writer.write_all(&self.k.to_le_bytes()).unwrap();
         for point in self.g.iter() {
@@ -137,6 +150,18 @@ impl<M: MultiMillerLoop> Srs<M> {
         }
         writer.write_all(self.g2.to_bytes().as_ref()).unwrap();
         writer.write_all(self.s_g2.to_bytes().as_ref()).unwrap();
+    }
+
+    pub fn write_raw(&self, writer: &mut impl io::Write) {
+        writer.write_all(&self.k.to_le_bytes()).unwrap();
+        for point in self.g.iter() {
+            point.write_raw(writer).unwrap();
+        }
+        for point in self.g_lagrange.iter() {
+            point.write_raw(writer).unwrap();
+        }
+        self.g2.write_raw(writer).unwrap();
+        self.s_g2.write_raw(writer).unwrap();
     }
 
     pub fn downsize(&mut self, k: u32) {
