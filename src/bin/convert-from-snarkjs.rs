@@ -16,6 +16,7 @@ fn main() {
             &mut File::open(src).expect("Couldn't open file at {path}"),
             SrsFormat::SnarkJs,
             desired_k,
+            true,
         )
     } else {
         Srs::<Bn256>::read(
