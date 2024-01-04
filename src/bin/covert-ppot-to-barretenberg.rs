@@ -1,5 +1,7 @@
 use halo2_curves::bn256::Bn256;
+use halo2_curves::serde::SerdeObject;
 use halo2_kzg_srs::{Srs, SrsFormat};
+use std::io::Write;
 use std::{env, fs::File};
 
 fn main() {
@@ -18,13 +20,21 @@ fn main() {
         &mut File::open(src).expect("Couldn't open file at {path}"),
         SrsFormat::PerpetualPowerOfTau(28),
         desired_k,
-        true,
+        false,
     );
 
-    for k in (1..=srs.k).rev() {
-        let mut srs = srs.clone();
-        srs.downsize(k);
-        let path = format!("{dst_prefix}{k}");
-        srs.write_raw(&mut File::create(path).expect("Couldn't create file at {path}"))
-    }
+    let g_bytes = srs
+        .g
+        .into_iter()
+        .flat_map(|point| point.to_raw_bytes())
+        .collect::<Vec<u8>>();
+    let path = format!("{dst_prefix}-{desired_k}.g1");
+    let mut file = File::create(path).expect("Couldn't create file at {path}");
+    file.write_all(&g_bytes)
+        .expect("Failed to write g1 points to file");
+
+    let path = format!("{dst_prefix}-{desired_k}.g2");
+    let mut file = File::create(path).expect("Couldn't create file at {path}");
+    file.write_all(&srs.g2.to_raw_bytes())
+        .expect("Failed to write g2 points to file");
 }

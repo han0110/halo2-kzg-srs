@@ -51,13 +51,14 @@ where
             SrsFormat::SnarkJs => snarkjs::read_k(reader),
         };
         reader.rewind().unwrap();
-        Self::read_partial(reader, format, desired_k)
+        Self::read_partial(reader, format, desired_k, true)
     }
 
     pub fn read_partial<R: io::Read + io::Seek>(
         reader: &mut R,
         format: SrsFormat,
         desired_k: u32,
+        compute_lagrange: bool,
     ) -> Self {
         let srs = match format {
             SrsFormat::Pse => Self::read_partial_pse::<_, false>(reader, desired_k),
@@ -68,7 +69,11 @@ where
                 let n = 1 << desired_k;
 
                 let g = perpetual_powers_of_tau::read_g1s::<M, _, false>(reader, n);
-                let g_lagrange = g_to_lagrange(&g, desired_k);
+                let g_lagrange = if compute_lagrange {
+                    g_to_lagrange(&g, desired_k)
+                } else {
+                    vec![]
+                };
 
                 let [g2, s_g2]: [_; 2] =
                     perpetual_powers_of_tau::read_g2s::<M, _, false>(reader, k, 2)
