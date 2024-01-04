@@ -1,8 +1,8 @@
 use halo2_curves::bn256::Bn256;
-use halo2_kzg_srs::{Srs, SrsFormat};
-use std::{env, fs::File};
-use std::io::Write;
 use halo2_curves::serde::SerdeObject;
+use halo2_kzg_srs::{Srs, SrsFormat};
+use std::io::Write;
+use std::{env, fs::File};
 
 fn main() {
     let src = env::args()
@@ -23,12 +23,18 @@ fn main() {
         false,
     );
 
-    let g_bytes = srs.g.into_iter().flat_map(|point| point.to_raw_bytes()).collect::<Vec<u8>>();
+    let g_bytes = srs
+        .g
+        .into_iter()
+        .flat_map(|point| point.to_raw_bytes())
+        .collect::<Vec<u8>>();
     let path = format!("{dst_prefix}-{desired_k}.g1");
     let mut file = File::create(path).expect("Couldn't create file at {path}");
-    file.write_all(&g_bytes).expect("Failed to write g1 points to file");
+    file.write_all(&g_bytes)
+        .expect("Failed to write g1 points to file");
 
     let path = format!("{dst_prefix}-{desired_k}.g2");
     let mut file = File::create(path).expect("Couldn't create file at {path}");
-    file.write_all(&srs.g2.to_raw_bytes()).expect("Failed to write g2 points to file");
+    file.write_all(&srs.g2.to_raw_bytes())
+        .expect("Failed to write g2 points to file");
 }

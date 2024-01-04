@@ -18,7 +18,7 @@ fn main() {
         &mut File::open(src).expect("Couldn't open file at {path}"),
         SrsFormat::PerpetualPowerOfTau(28),
         desired_k,
-        true
+        true,
     );
 
     for k in (1..=srs.k).rev() {
